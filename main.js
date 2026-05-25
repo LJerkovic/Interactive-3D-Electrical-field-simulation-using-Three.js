@@ -69,7 +69,7 @@ const fieldConfig = {
   maxVectorLength: 2,
   minDistance: 0.4,
   scale: 1,
-  fadeEnabled: true,
+  fadeEnabled: false,
   fadeStrength: 1,
   fadeStart: 2,
   fadeEnd: 10,
