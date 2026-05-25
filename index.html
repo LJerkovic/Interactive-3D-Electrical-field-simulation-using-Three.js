@@ -19,8 +19,16 @@
       <input id="charge-z" type="number" step="0.5" value="0">
       <label for="field-spacing">Field density</label>
       <div class="slider-row">
-    <input id="field-spacing" type="range" min="0.75" max="2.5" step="0.25" value="1.25">
+        <input id="field-spacing" type="range" min="0.75" max="2.5" step="0.25" value="1.25">
         <span class="slider-value" id="field-spacing-value">1.0</span>
+      </div>
+      <label for="region-size">Region size</label>
+      <div class="slider-row">
+        <input id="region-size" type="range" min="6" max="30" step="1" value="14">
+        <span class="slider-value" id="region-size-value">14</span>
+      </div>
+      <div class="slider-row">
+        <button class="toggle-button" id="field-lines-toggle" type="button">Field lines: Off</button>
       </div>
       <details class="advanced-settings">
         <summary>Advanced settings</summary>

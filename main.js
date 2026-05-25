@@ -33,7 +33,8 @@ scene.add(dirLight);
 
 const chargesGroup = new THREE.Group();
 const fieldGroup = new THREE.Group();
-scene.add(chargesGroup, fieldGroup);
+const fieldLinesGroup = new THREE.Group();
+scene.add(chargesGroup, fieldGroup, fieldLinesGroup);
 
 const chargeGeometry = new THREE.SphereGeometry(0.35, 24, 24);
 const chargeMaterials = {
@@ -52,6 +53,9 @@ const ui = {
   z: document.getElementById('charge-z'),
   spacing: document.getElementById('field-spacing'),
   spacingValue: document.getElementById('field-spacing-value'),
+  regionSize: document.getElementById('region-size'),
+  regionSizeValue: document.getElementById('region-size-value'),
+  fieldLinesToggle: document.getElementById('field-lines-toggle'),
   fadeToggle: document.getElementById('fade-toggle'),
   fadeStrength: document.getElementById('fade-strength'),
   fadeStrengthValue: document.getElementById('fade-strength-value'),
@@ -62,13 +66,22 @@ const ui = {
   list: document.getElementById('charge-list')
 };
   // KONFIGURACIJA POLJA  - PRILAGOĐAVANJE VELIČINE REGIJE, RAZMAKA IZMEĐU VEKTORA,
-  //  MAKSIMALNE DULJINE VEKTORA, I SKALIRANJA POLJA
+  //  MAKSIMALNE DULJINE VEKTORA, SKALIRANJA POLJA , SILNICA ITD
 const fieldConfig = {
   regionSize: 14,
   spacing: 1,
   maxVectorLength: 2,
   minDistance: 0.4,
   scale: 1,
+  fieldLinesEnabled: false,
+  lineStep: 0.2,
+  lineMaxSteps: 200,
+  lineStartOffset: 0.6,
+  linesPerCharge: 12,
+  lineMinField: 0.01,
+  lineMinDistance: 0.5,
+  lineOpacity: 0.6,
+  lineColor: 0xefe6a4,
   fadeEnabled: false,
   fadeStrength: 1,
   fadeStart: 2,
@@ -102,7 +115,7 @@ function addCharge({ position, value }) {
   charges.push(charge);
 
   renderChargeList();
-  rebuildFieldVectors();
+  rebuildFieldVisualization();
   return charge;
 }
 
@@ -118,7 +131,7 @@ function removeCharge(id) {
   }
 
   renderChargeList();
-  rebuildFieldVectors();
+  rebuildFieldVisualization();
 }
 
 function renderChargeList() {
@@ -229,8 +242,121 @@ function rebuildFieldVectors() {
   }
 }
 
+function traceFieldLine(startPoint) {
+  const points = [startPoint.clone()];
+  const current = startPoint.clone();
+  const half = fieldConfig.regionSize * 0.5;
+
+  for (let step = 0; step < fieldConfig.lineMaxSteps; step += 1) {
+    const field = computeFieldAt(current);
+    const magnitude = field.length();
+
+    if (magnitude < fieldConfig.lineMinField) {
+      break;
+    }
+
+    field.normalize();
+    current.addScaledVector(field, fieldConfig.lineStep);
+
+    if (
+      Math.abs(current.x) > half ||
+      Math.abs(current.y) > half ||
+      Math.abs(current.z) > half
+    ) {
+      break;
+    }
+
+    let tooClose = false;
+    for (const charge of charges) {
+      if (current.distanceTo(charge.position) < fieldConfig.lineMinDistance) {
+        tooClose = true;
+        break;
+      }
+    }
+
+    if (tooClose) {
+      break;
+    }
+
+    points.push(current.clone());
+  }
+
+  return points;
+}
+
+function generateSphereDirections(count) {
+  const directions = [];
+  const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+
+  for (let i = 0; i < count; i += 1) {
+    const y = 1 - (i / Math.max(count - 1, 1)) * 2;
+    const radius = Math.sqrt(1 - y * y);
+    const theta = goldenAngle * i;
+    const x = Math.cos(theta) * radius;
+    const z = Math.sin(theta) * radius;
+    directions.push(new THREE.Vector3(x, y, z));
+  }
+
+  return directions;
+}
+
+function buildFieldLines() {
+  fieldLinesGroup.clear();
+
+  if (charges.length === 0) {
+    return;
+  }
+
+  const material = new THREE.LineBasicMaterial({
+    color: fieldConfig.lineColor,
+    transparent: true,
+    opacity: fieldConfig.lineOpacity
+  });
+
+  for (const charge of charges) {
+    if (charge.value <= 0) {
+      continue;
+    }
+
+    const directions = generateSphereDirections(fieldConfig.linesPerCharge);
+    for (const direction of directions) {
+      const start = charge.position.clone().addScaledVector(direction, fieldConfig.lineStartOffset);
+      const points = traceFieldLine(start);
+      if (points.length < 2) {
+        continue;
+      }
+
+      const geometry = new THREE.BufferGeometry().setFromPoints(points);
+      const line = new THREE.Line(geometry, material);
+      fieldLinesGroup.add(line);
+    }
+  }
+}
+
+function rebuildFieldVisualization() {
+  fieldGroup.clear();
+  fieldLinesGroup.clear();
+
+  fieldGroup.visible = !fieldConfig.fieldLinesEnabled;
+  fieldLinesGroup.visible = fieldConfig.fieldLinesEnabled;
+
+  if (fieldConfig.fieldLinesEnabled) {
+    buildFieldLines();
+  } else {
+    rebuildFieldVectors();
+  }
+}
+
 function updateSpacingLabel() {
   ui.spacingValue.textContent = Number(fieldConfig.spacing).toFixed(1);
+}
+
+function updateRegionSizeLabel() {
+  ui.regionSizeValue.textContent = Math.round(fieldConfig.regionSize).toString();
+}
+
+function updateFieldLinesLabel() {
+  ui.fieldLinesToggle.textContent = fieldConfig.fieldLinesEnabled ? 'Field lines: On' : 'Field lines: Off';
 }
 
 function updateFadeLabel() {
@@ -264,13 +390,30 @@ ui.spacing.addEventListener('input', () => {
 
   fieldConfig.spacing = spacing;
   updateSpacingLabel();
-  rebuildFieldVectors();
+  rebuildFieldVisualization();
+});
+
+ui.regionSize.addEventListener('input', () => {
+  const regionSize = Number.parseFloat(ui.regionSize.value);
+  if (Number.isNaN(regionSize) || regionSize <= 0) {
+    return;
+  }
+
+  fieldConfig.regionSize = regionSize;
+  updateRegionSizeLabel();
+  rebuildFieldVisualization();
+});
+
+ui.fieldLinesToggle.addEventListener('click', () => {
+  fieldConfig.fieldLinesEnabled = !fieldConfig.fieldLinesEnabled;
+  updateFieldLinesLabel();
+  rebuildFieldVisualization();
 });
 
 ui.fadeToggle.addEventListener('click', () => {
   fieldConfig.fadeEnabled = !fieldConfig.fadeEnabled;
   updateFadeLabel();
-  rebuildFieldVectors();
+  rebuildFieldVisualization();
 });
 
 ui.fadeStrength.addEventListener('input', () => {
@@ -281,13 +424,13 @@ ui.fadeStrength.addEventListener('input', () => {
 
   fieldConfig.fadeStrength = Math.min(Math.max(strength, 0), 1);
   updateFadeLabel();
-  rebuildFieldVectors();
+  rebuildFieldVisualization();
 });
 
 ui.cullToggle.addEventListener('click', () => {
   fieldConfig.cullEnabled = !fieldConfig.cullEnabled;
   updateCullLabel();
-  rebuildFieldVectors();
+  rebuildFieldVisualization();
 });
 
 ui.cullDistance.addEventListener('input', () => {
@@ -298,15 +441,18 @@ ui.cullDistance.addEventListener('input', () => {
 
   fieldConfig.cullDistance = Math.min(Math.max(distance, 4), 20);
   updateCullLabel();
-  rebuildFieldVectors();
+  rebuildFieldVisualization();
 });
 
 renderChargeList();
 updateSpacingLabel();
+updateRegionSizeLabel();
+updateFieldLinesLabel();
 updateFadeLabel();
 updateCullLabel();
 
 ui.cullDistance.value = fieldConfig.cullDistance.toString();
+ui.regionSize.value = fieldConfig.regionSize.toString();
 
 function animate() {
   controls.update();
