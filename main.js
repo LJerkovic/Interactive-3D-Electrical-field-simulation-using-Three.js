@@ -77,7 +77,7 @@ const fieldConfig = {
   lineStep: 0.2,
   lineMaxSteps: 200,
   lineStartOffset: 0.6,
-  linesPerCharge: 12,
+  linesPerCharge: 24,
   lineMinField: 0.01,
   lineMinDistance: 0.5,
   lineOpacity: 0.6,
